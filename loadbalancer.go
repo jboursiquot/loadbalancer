@@ -7,6 +7,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 
+	"github.com/google/uuid"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -17,8 +18,21 @@ type LoadBalancer struct {
 }
 
 func (lb *LoadBalancer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	reqID := r.Header.Get("X-Request-ID")
+	if reqID == "" {
+		reqID = uuid.New().String()
+	}
+
 	u := &url.URL{Scheme: "http", Host: lb.nextAvailableServer().httpServer.Addr}
-	httputil.NewSingleHostReverseProxy(u).ServeHTTP(w, r)
+	slog.Info("LoadBalancer", "request", reqID, "server", u.String())
+
+	p := httputil.NewSingleHostReverseProxy(u)
+	d := p.Director
+	p.Director = func(r *http.Request) {
+		d(r)
+		r.Header.Set("X-Request-ID", reqID)
+	}
+	p.ServeHTTP(w, r)
 }
 
 func NewLoadBalancer(port string) *LoadBalancer {

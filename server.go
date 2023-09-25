@@ -2,6 +2,7 @@ package loadbalancer
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"net/http"
 
@@ -34,7 +35,7 @@ func newServer(addr string) *server {
 	})
 
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Server " + addr))
+		w.Write([]byte(fmt.Sprintf("Server %s handled request %s", addr, r.Header.Get("X-Request-ID"))))
 	})
 
 	return &server{
