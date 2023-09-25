@@ -1,6 +1,7 @@
 package loadbalancer
 
 import (
+	"math/rand"
 	"net/http"
 
 	"log/slog"
@@ -18,6 +19,11 @@ func (s *server) start() error {
 func newServer(addr string) *server {
 	r := http.NewServeMux()
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		if rand.Intn(2) == 0 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
 		w.WriteHeader(http.StatusOK)
 	})
 

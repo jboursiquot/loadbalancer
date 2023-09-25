@@ -57,5 +57,10 @@ func (lb *LoadBalancer) Stop() error {
 func (lb *LoadBalancer) nextAvailableServer() *server {
 	s := lb.servers[lb.roundRobinIndex]
 	lb.roundRobinIndex = (lb.roundRobinIndex + 1) % len(lb.servers)
+	r, err := http.Head("http://" + s.httpServer.Addr + "/health")
+	if err != nil || r.StatusCode != http.StatusOK {
+		slog.Warn("LoadBalancer skipping unhealthy server", "port", s.httpServer.Addr)
+		return lb.nextAvailableServer()
+	}
 	return s
 }

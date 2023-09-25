@@ -14,3 +14,6 @@ lb:
 .PHONY: list-running-servers
 list-running-servers:
 	-@lsof -Pi :8080-8083
+
+requests:
+	for i in {1..10}; do curl -s http://localhost:8080/; echo; done
