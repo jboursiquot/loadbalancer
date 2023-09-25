@@ -1,14 +1,18 @@
 package loadbalancer
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+
+	"golang.org/x/sync/errgroup"
 )
 
 type LoadBalancer struct {
 	servers         []*server
+	server          *http.Server
 	roundRobinIndex int
 }
 
@@ -17,8 +21,12 @@ func (lb *LoadBalancer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	httputil.NewSingleHostReverseProxy(u).ServeHTTP(w, r)
 }
 
-func NewLoadBalancer() *LoadBalancer {
-	return &LoadBalancer{}
+func NewLoadBalancer(port string) *LoadBalancer {
+	return &LoadBalancer{
+		server: &http.Server{
+			Addr: port,
+		},
+	}
 }
 
 func (lb *LoadBalancer) Start(ports []string) error {
@@ -28,7 +36,7 @@ func (lb *LoadBalancer) Start(ports []string) error {
 		go func() {
 			port := s.httpServer.Addr
 			if err := s.start(); err != nil {
-				slog.Error("LoadBalancer failed to start server", "port", port, "error", err.Error())
+				slog.Warn("Server", "port", port, "error", err.Error())
 			}
 		}()
 	}
@@ -40,17 +48,33 @@ func (lb *LoadBalancer) Start(ports []string) error {
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		lb.ServeHTTP(w, r)
 	})
+	lb.server.Handler = r
 
-	s := &http.Server{
-		Addr:    ":8080",
-		Handler: r,
-	}
-
-	slog.Info("LoadBalancer running...", "port", s.Addr)
-	return s.ListenAndServe()
+	slog.Info("LoadBalancer running...", "port", lb.server.Addr)
+	return lb.server.ListenAndServe()
 }
 
-func (lb *LoadBalancer) Stop() error {
+func (lb *LoadBalancer) Stop(ctx context.Context) error {
+	// Stop all servers
+	g := errgroup.Group{}
+	for _, s := range lb.servers {
+		s := s
+		g.Go(func() error {
+			return s.stop(ctx)
+		})
+	}
+
+	// Wait for all servers to stop
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	// Shutdown the load balancer's http server
+	if err := lb.server.Shutdown(ctx); err != nil {
+		return err
+	}
+
+	slog.Info("LoadBalancer stopped gracefully", "port", lb.server.Addr)
 	return nil
 }
 

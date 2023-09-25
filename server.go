@@ -1,6 +1,7 @@
 package loadbalancer
 
 import (
+	"context"
 	"math/rand"
 	"net/http"
 
@@ -14,6 +15,11 @@ type server struct {
 func (s *server) start() error {
 	slog.Info("Starting server", "addr", s.httpServer.Addr)
 	return s.httpServer.ListenAndServe()
+}
+
+func (s *server) stop(ctx context.Context) error {
+	slog.Info("Stopping server", "addr", s.httpServer.Addr)
+	return s.httpServer.Shutdown(ctx)
 }
 
 func newServer(addr string) *server {
